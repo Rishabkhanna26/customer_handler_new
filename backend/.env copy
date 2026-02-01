@@ -1,0 +1,9 @@
+# DATABASE CONFIG
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=client_handle
+
+# SERVER CONFIG
+PORT=4000
+BASE_URL=http://localhost:4000
