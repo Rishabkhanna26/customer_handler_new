@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { io } from 'socket.io-client';
 import Card from '../components/common/Card.jsx';
 import Button from '../components/common/Button.jsx';
 import Input from '../components/common/Input.jsx';
@@ -15,6 +16,11 @@ import {
   faShieldHalved,
 } from '@fortawesome/free-solid-svg-icons';
 
+const WHATSAPP_API_BASE =
+  process.env.NEXT_PUBLIC_WHATSAPP_API_BASE || 'http://localhost:4000';
+const WHATSAPP_SOCKET_URL =
+  process.env.NEXT_PUBLIC_WHATSAPP_SOCKET_URL || WHATSAPP_API_BASE;
+
 export default function SettingsPage() {
   const { user, loading: authLoading, refresh } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
@@ -27,6 +33,9 @@ export default function SettingsPage() {
   const [profilePhotoPreview, setProfilePhotoPreview] = useState(null);
   const [saveStatus, setSaveStatus] = useState('');
   const [whatsappConnected, setWhatsappConnected] = useState(false);
+  const [whatsappStatus, setWhatsappStatus] = useState('idle');
+  const [whatsappQr, setWhatsappQr] = useState('');
+  const [whatsappActionStatus, setWhatsappActionStatus] = useState('');
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState('');
   const [whatsappConfig, setWhatsappConfig] = useState({
@@ -77,6 +86,91 @@ export default function SettingsPage() {
     }
   }, [authLoading]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch(`${WHATSAPP_API_BASE}/whatsapp/status`);
+        if (!response.ok) {
+          throw new Error('Failed to load WhatsApp status');
+        }
+        const payload = await response.json();
+        if (!isMounted) return;
+        const nextStatus = payload?.status || 'idle';
+        setWhatsappStatus(nextStatus);
+        setWhatsappConnected(nextStatus === 'connected');
+        if (nextStatus === 'connected') {
+          setWhatsappQr('');
+        } else if (payload?.qrImage) {
+          setWhatsappQr(payload.qrImage);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setWhatsappActionStatus('Unable to fetch WhatsApp status.');
+        }
+      }
+    };
+
+    fetchStatus();
+
+    const socket = io(WHATSAPP_SOCKET_URL);
+
+    socket.on('whatsapp:status', (payload) => {
+      const nextStatus = payload?.status || 'idle';
+      setWhatsappStatus(nextStatus);
+      setWhatsappConnected(nextStatus === 'connected');
+      if (nextStatus === 'connected') {
+        setWhatsappQr('');
+      } else if (payload?.qrImage) {
+        setWhatsappQr(payload.qrImage);
+      }
+    });
+
+    socket.on('whatsapp:qr', (qrImage) => {
+      if (qrImage) {
+        setWhatsappQr(qrImage);
+      }
+    });
+
+    socket.on('connect_error', () => {
+      setWhatsappActionStatus('Unable to connect to WhatsApp service.');
+    });
+
+    return () => {
+      isMounted = false;
+      socket.disconnect();
+    };
+  }, []);
+
+  const handleStartWhatsApp = async () => {
+    try {
+      setWhatsappActionStatus('');
+      const response = await fetch(`${WHATSAPP_API_BASE}/whatsapp/start`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to start WhatsApp');
+      }
+    } catch (error) {
+      setWhatsappActionStatus(error.message);
+    }
+  };
+
+  const handleDisconnectWhatsApp = async () => {
+    try {
+      setWhatsappActionStatus('');
+      const response = await fetch(`${WHATSAPP_API_BASE}/whatsapp/disconnect`, {
+        method: 'POST',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to disconnect WhatsApp');
+      }
+    } catch (error) {
+      setWhatsappActionStatus(error.message);
+    }
+  };
+
   const tabs = [
     { id: 'profile', name: 'Profile', icon: faUser },
     // { id: 'notifications', name: 'Notifications', icon: faBell },
@@ -85,6 +179,27 @@ export default function SettingsPage() {
     // { id: 'integrations', name: 'Integrations', icon: faGlobe },
     { id: 'security', name: 'Security', icon: faShieldHalved }
   ];
+
+  const isWhatsappPending = whatsappStatus === 'starting' || whatsappStatus === 'qr';
+  const whatsappTone = whatsappConnected ? 'green' : isWhatsappPending ? 'amber' : 'red';
+  const whatsappStatusLabel = whatsappConnected
+    ? 'Connected'
+    : whatsappStatus === 'starting'
+    ? 'Starting'
+    : whatsappStatus === 'qr'
+    ? 'Awaiting Scan'
+    : whatsappStatus === 'auth_failure'
+    ? 'Auth Failed'
+    : 'Disconnected';
+  const whatsappStatusMessage = whatsappConnected
+    ? 'WhatsApp client is connected and active.'
+    : whatsappStatus === 'starting'
+    ? 'Starting WhatsApp client. Please wait...'
+    : whatsappStatus === 'qr'
+    ? 'Scan the QR code below with WhatsApp to connect.'
+    : whatsappStatus === 'auth_failure'
+    ? 'Authentication failed. Please reconnect.'
+    : 'WhatsApp client is currently disconnected.';
 
   return (
     <div className="space-y-6" data-testid="settings-page">
@@ -361,19 +476,68 @@ export default function SettingsPage() {
             <Card>
               <h2 className="text-2xl font-bold text-aa-dark-blue mb-6">WhatsApp Configuration</h2>
               <div className="space-y-6">
-                <div className={`p-6 border-2 rounded-lg ${whatsappConnected ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                <div
+                  className={`p-6 border-2 rounded-lg ${
+                    whatsappTone === 'green'
+                      ? 'bg-green-50 border-green-200'
+                      : whatsappTone === 'amber'
+                      ? 'bg-amber-50 border-amber-200'
+                      : 'bg-red-50 border-red-200'
+                  }`}
+                >
                   <div className="flex items-center gap-3 mb-2">
-                    <div className={`w-3 h-3 rounded-full ${whatsappConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
-                    <span className={`font-semibold ${whatsappConnected ? 'text-green-700' : 'text-red-700'}`}>
-                      {whatsappConnected ? 'Connected' : 'Disconnected'}
+                    <div
+                      className={`w-3 h-3 rounded-full ${
+                        whatsappTone === 'green'
+                          ? 'bg-green-500 animate-pulse'
+                          : whatsappTone === 'amber'
+                          ? 'bg-amber-500 animate-pulse'
+                          : 'bg-red-500'
+                      }`}
+                    ></div>
+                    <span
+                      className={`font-semibold ${
+                        whatsappTone === 'green'
+                          ? 'text-green-700'
+                          : whatsappTone === 'amber'
+                          ? 'text-amber-700'
+                          : 'text-red-700'
+                      }`}
+                    >
+                      {whatsappStatusLabel}
                     </span>
                   </div>
-                  <p className={`text-sm ${whatsappConnected ? 'text-green-600' : 'text-red-600'}`}>
-                    {whatsappConnected
-                      ? 'WhatsApp Business API is connected and active'
-                      : 'WhatsApp Business API is currently disconnected'}
+                  <p
+                    className={`text-sm ${
+                      whatsappTone === 'green'
+                        ? 'text-green-600'
+                        : whatsappTone === 'amber'
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                    }`}
+                  >
+                    {whatsappStatusMessage}
                   </p>
                 </div>
+
+                {!whatsappConnected && whatsappQr && (
+                  <div className="flex flex-col items-center gap-3 p-6 border-2 border-dashed border-gray-200 rounded-lg bg-white">
+                    <img
+                      src={whatsappQr}
+                      alt="WhatsApp QR Code"
+                      className="w-56 h-56"
+                    />
+                    <p className="text-sm text-aa-gray text-center">
+                      Open WhatsApp on your phone → Linked Devices → Link a device
+                    </p>
+                  </div>
+                )}
+
+                {whatsappActionStatus && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    {whatsappActionStatus}
+                  </div>
+                )}
 
                 <Input
                   label="Phone Number"
@@ -395,13 +559,24 @@ export default function SettingsPage() {
                 />
 
                 <div className="flex gap-3">
+                  <Button
+                    variant="primary"
+                    onClick={handleStartWhatsApp}
+                    disabled={whatsappConnected || whatsappStatus === 'starting'}
+                  >
+                    {whatsappConnected
+                      ? 'Connected'
+                      : whatsappStatus === 'starting'
+                      ? 'Starting...'
+                      : 'Connect WhatsApp'}
+                  </Button>
                   <Button variant="primary" disabled={!whatsappConnected}>
                     Update Settings
                   </Button>
                   <Button
                     variant="outline"
                     className="text-red-600 border-red-600 hover:bg-red-50"
-                    onClick={() => setWhatsappConnected(false)}
+                    onClick={handleDisconnectWhatsApp}
                     disabled={!whatsappConnected}
                   >
                     Disconnect

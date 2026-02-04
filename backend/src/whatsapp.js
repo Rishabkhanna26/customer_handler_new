@@ -1,8 +1,11 @@
 import pkg from "whatsapp-web.js";
 import qrcode from "qrcode-terminal";
+import qrImage from "qrcode";
+import { EventEmitter } from "node:events";
 import { db } from "./db.js";
 
 const { Client, LocalAuth } = pkg;
+export const whatsappEvents = new EventEmitter();
 
 /* ===============================
    CLIENT SETUP
@@ -10,25 +13,94 @@ const { Client, LocalAuth } = pkg;
 export const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
-    headless: false,
+    headless: true,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   },
 });
 
 
 let isReady = false;
+let hasStarted = false;
+let status = "idle";
+let latestQrImage = null;
+
+const emitStatus = (nextStatus) => {
+  status = nextStatus;
+  whatsappEvents.emit("status", status);
+};
 
 /* ===============================
    QR & READY EVENTS
    =============================== */
-client.on("qr", (qr) => {
+client.on("qr", async (qr) => {
+  emitStatus("qr");
+  isReady = false;
   console.log("📱 Scan the QR code");
   qrcode.generate(qr, { small: true });
+  try {
+    latestQrImage = await qrImage.toDataURL(qr);
+    whatsappEvents.emit("qr", latestQrImage);
+  } catch (err) {
+    console.error("❌ QR generation failed:", err);
+  }
 });
 
 client.on("ready", () => {
   isReady = true;
+  latestQrImage = null;
+  emitStatus("connected");
   console.log("✅ WhatsApp Ready");
+});
+
+client.on("disconnected", () => {
+  isReady = false;
+  emitStatus("disconnected");
+  console.log("⚠️ WhatsApp disconnected");
+});
+
+client.on("auth_failure", () => {
+  isReady = false;
+  emitStatus("auth_failure");
+  console.log("❌ WhatsApp auth failure");
+});
+
+export const startWhatsApp = async () => {
+  if (hasStarted) {
+    return { status, alreadyStarted: true };
+  }
+
+  hasStarted = true;
+  emitStatus("starting");
+  try {
+    await client.initialize();
+    return { status, alreadyStarted: false };
+  } catch (err) {
+    hasStarted = false;
+    emitStatus("error");
+    throw err;
+  }
+};
+
+export const stopWhatsApp = async () => {
+  if (!hasStarted) {
+    return { status, alreadyStarted: false };
+  }
+
+  try {
+    await client.destroy();
+  } finally {
+    hasStarted = false;
+    isReady = false;
+    latestQrImage = null;
+    emitStatus("disconnected");
+  }
+  return { status, alreadyStarted: true };
+};
+
+export const getWhatsAppState = () => ({
+  status,
+  ready: isReady,
+  qrImage: latestQrImage,
 });
 
 /* ===============================
@@ -245,4 +317,4 @@ Our team will contact you shortly.`
 /* ===============================
    INIT
    =============================== */
-client.initialize();
+// Start the client via startWhatsApp() from the server.
