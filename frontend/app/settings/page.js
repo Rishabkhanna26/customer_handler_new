@@ -79,10 +79,10 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: 'profile', name: 'Profile', icon: faUser },
-    { id: 'notifications', name: 'Notifications', icon: faBell },
+    // { id: 'notifications', name: 'Notifications', icon: faBell },
     { id: 'appearance', name: 'Appearance', icon: faPalette },
     { id: 'whatsapp', name: 'WhatsApp', icon: faMobileScreen },
-    { id: 'integrations', name: 'Integrations', icon: faGlobe },
+    // { id: 'integrations', name: 'Integrations', icon: faGlobe },
     { id: 'security', name: 'Security', icon: faShieldHalved }
   ];
 
@@ -293,7 +293,7 @@ export default function SettingsPage() {
           )}
 
           {/* Notifications Settings */}
-          {activeTab === 'notifications' && (
+          {/* {activeTab === 'notifications' && (
             <Card>
               <h2 className="text-2xl font-bold text-aa-dark-blue mb-6">Notification Preferences</h2>
               <div className="space-y-4">
@@ -317,7 +317,7 @@ export default function SettingsPage() {
                 ))}
               </div>
             </Card>
-          )}
+          )} */}
 
           {/* Appearance Settings */}
           {activeTab === 'appearance' && (
@@ -412,7 +412,7 @@ export default function SettingsPage() {
           )}
 
           {/* Integrations */}
-          {activeTab === 'integrations' && (
+          {/* {activeTab === 'integrations' && (
             <Card>
               <h2 className="text-2xl font-bold text-aa-dark-blue mb-6">Integrations</h2>
               <div className="space-y-4">
@@ -442,7 +442,7 @@ export default function SettingsPage() {
                 ))}
               </div>
             </Card>
-          )}
+          )} */}
 
           {/* Security Settings */}
           {activeTab === 'security' && (

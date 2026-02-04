@@ -29,11 +29,11 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
     { name: 'Inbox', icon: faInbox, path: '/inbox', badge: '12' },
     { name: 'Contacts', icon: faUsers, path: '/contacts' },
     { name: 'Leads', icon: faChartLine, path: '/leads' },
-    { name: 'Broadcast', icon: faTowerBroadcast, path: '/broadcast' },
-    { name: 'Automation', icon: faBolt, path: '/automation' },
-    { name: 'Templates', icon: faFileLines, path: '/templates' },
+    // { name: 'Broadcast', icon: faTowerBroadcast, path: '/broadcast' },
+    // { name: 'Automation', icon: faBolt, path: '/automation' },
+    // { name: 'Templates', icon: faFileLines, path: '/templates' },
     { name: 'Reports', icon: faChartBar, path: '/reports' },
-    { name: 'Team', icon: faUserGroup, path: '/team' },
+    // { name: 'Team', icon: faUserGroup, path: '/team' },
     { name: 'Settings', icon: faGear, path: '/settings' },
   ];
   const visibleItems = filterMenuItems(user?.admin_tier, menuItems);
