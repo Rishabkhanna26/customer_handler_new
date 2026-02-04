@@ -1,11 +1,15 @@
 import mysql from "mysql2/promise";
+import dotenv from "dotenv";
 
-const DB_NAME = "client_handle";
+dotenv.config();
+
+const DB_NAME = process.env.DB_NAME || "client_handle";
 
 const config = {
-  host: "localhost",
-  user: "root",        // change if needed
-  password: "",        // change if needed
+  host: process.env.DB_HOST || "localhost",
+  user: process.env.DB_USER || "admin",
+  password: process.env.DB_PASSWORD || "root",
+  port: Number(process.env.DB_PORT || 3306),
 };
 
 export async function initDatabase() {
@@ -22,55 +26,92 @@ export async function initDatabase() {
     // 3️⃣ switch to database
     await connection.query(`USE ${DB_NAME}`);
 
-    // 4️⃣ create admins table
+    // 4️⃣ create admin_accounts table
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS admins (
+      CREATE TABLE IF NOT EXISTS admin_accounts (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(100) NOT NULL,
         phone VARCHAR(20) UNIQUE NOT NULL,
         email VARCHAR(150) UNIQUE,
         password_hash TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        admin_tier ENUM('super_admin', 'client_admin') DEFAULT 'client_admin',
+        status ENUM('active', 'inactive') DEFAULT 'active',
+        parent_admin_id INT,
+        last_login DATETIME,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (parent_admin_id) REFERENCES admin_accounts(id),
+        INDEX (admin_tier),
+        INDEX (phone)
       )
     `);
 
-    // 5️⃣ create clients table
+    // 5️⃣ create users table
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS clients (
+      CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        name VARCHAR(100),
         phone VARCHAR(20) UNIQUE NOT NULL,
+        name VARCHAR(100),
         email VARCHAR(150),
-        reason VARCHAR(150),
-        status VARCHAR(50) DEFAULT 'new',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        assigned_admin_id INT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (assigned_admin_id) REFERENCES admin_accounts(id),
+        INDEX (phone),
+        INDEX (assigned_admin_id)
       )
     `);
 
-    // 6️⃣ create admin_clients table
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS admin_clients (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        admin_id INT NOT NULL,
-        client_id INT NOT NULL,
-        assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (admin_id, client_id),
-        FOREIGN KEY (admin_id) REFERENCES admins(id),
-        FOREIGN KEY (client_id) REFERENCES clients(id)
-      )
-    `);
-
-    // 7️⃣ create messages table
+    // 6️⃣ create messages table
     await connection.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        client_id INT NOT NULL,
-        admin_id INT,
-        direction ENUM('incoming','outgoing') NOT NULL,
-        message TEXT NOT NULL,
+        user_id INT NOT NULL,
+        admin_id INT NOT NULL,
+        message_text TEXT NOT NULL,
+        message_type ENUM('incoming', 'outgoing') NOT NULL,
+        status ENUM('sent', 'delivered', 'read') DEFAULT 'sent',
+        metadata JSON,
+        media_mime_type VARCHAR(255),
+        media_filename VARCHAR(255),
+        media_data LONGTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (client_id) REFERENCES clients(id),
-        FOREIGN KEY (admin_id) REFERENCES admins(id)
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (admin_id) REFERENCES admin_accounts(id),
+        INDEX (user_id, created_at),
+        INDEX (admin_id, created_at)
+      )
+    `);
+
+    // 7️⃣ create user_requirements table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS user_requirements (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        requirement_text TEXT NOT NULL,
+        category VARCHAR(100),
+        status ENUM('pending', 'in_progress', 'completed') DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        INDEX (user_id, status)
+      )
+    `);
+
+    // 8️⃣ create user_needs table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS user_needs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        need_text TEXT NOT NULL,
+        priority ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium',
+        status ENUM('open', 'assigned', 'completed') DEFAULT 'open',
+        assigned_to INT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (assigned_to) REFERENCES admin_accounts(id),
+        INDEX (user_id, status)
       )
     `);
 

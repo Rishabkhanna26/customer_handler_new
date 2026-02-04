@@ -26,6 +26,14 @@ async function tableExists(connection, tableName) {
   return rows.length > 0;
 }
 
+async function columnExists(connection, tableName, columnName) {
+  const [rows] = await connection.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+    [DB_NAME, tableName, columnName]
+  );
+  return rows.length > 0;
+}
+
 export async function initDatabase() {
   try {
     // 1️⃣ connect without database first
@@ -99,6 +107,10 @@ export async function initDatabase() {
             message_text TEXT NOT NULL,
             message_type ENUM('incoming', 'outgoing') NOT NULL,
             status ENUM('sent', 'delivered', 'read') DEFAULT 'sent',
+            metadata JSON,
+            media_mime_type VARCHAR(255),
+            media_filename VARCHAR(255),
+            media_data LONGTEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (admin_id) REFERENCES admin_accounts(id),
@@ -159,6 +171,21 @@ export async function initDatabase() {
       console.log("✅ All tables already exist");
     } else {
       console.log(`✅ Tables created: ${createdCount}/${tables.length}`);
+    }
+
+    const messageColumns = [
+      { name: "metadata", sql: `ALTER TABLE messages ADD COLUMN metadata JSON` },
+      { name: "media_mime_type", sql: `ALTER TABLE messages ADD COLUMN media_mime_type VARCHAR(255)` },
+      { name: "media_filename", sql: `ALTER TABLE messages ADD COLUMN media_filename VARCHAR(255)` },
+      { name: "media_data", sql: `ALTER TABLE messages ADD COLUMN media_data LONGTEXT` },
+    ];
+
+    for (const column of messageColumns) {
+      const exists = await columnExists(connection, "messages", column.name);
+      if (!exists) {
+        console.log(`🛠️ Adding messages.${column.name} column...`);
+        await connection.query(column.sql);
+      }
     }
 
     console.log("✅ Database ready and verified");
