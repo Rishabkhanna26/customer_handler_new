@@ -83,6 +83,27 @@ export async function getAllRequirements() {
   }
 }
 
+export async function updateRequirementStatus(requirementId, status) {
+  const connection = await getConnection();
+  try {
+    await connection.query(
+      `UPDATE user_requirements SET status = ? WHERE id = ?`,
+      [status, requirementId]
+    );
+    const [rows] = await connection.query(
+      `SELECT r.*, u.name, u.phone 
+       FROM user_requirements r 
+       LEFT JOIN users u ON r.user_id = u.id
+       WHERE r.id = ?
+       LIMIT 1`,
+      [requirementId]
+    );
+    return rows[0] || null;
+  } finally {
+    connection.release();
+  }
+}
+
 // Get all needs with user and admin info
 export async function getAllNeeds() {
   const connection = await getConnection();

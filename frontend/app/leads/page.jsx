@@ -9,6 +9,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [updatingId, setUpdatingId] = useState(null);
 
   useEffect(() => {
     fetchRequirements();
@@ -16,13 +17,42 @@ export default function LeadsPage() {
 
   async function fetchRequirements() {
     try {
-      const response = await fetch('/api/requirements');
+      const response = await fetch('/api/requirements', { credentials: 'include' });
       const data = await response.json();
       setRequirements(data.data || []);
     } catch (error) {
       console.error('Failed to fetch requirements:', error);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function updateStatus(requirementId, status) {
+    const previous = requirements;
+    setUpdatingId(requirementId);
+    setRequirements((prev) =>
+      prev.map((req) => (req.id === requirementId ? { ...req, status } : req))
+    );
+
+    try {
+      const response = await fetch(`/api/requirements/${requirementId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update status');
+      }
+      setRequirements((prev) =>
+        prev.map((req) => (req.id === requirementId ? data.data : req))
+      );
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      setRequirements(previous);
+    } finally {
+      setUpdatingId(null);
     }
   }
 
@@ -92,7 +122,7 @@ export default function LeadsPage() {
       <div className="space-y-3">
         {filteredRequirements.length === 0 ? (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <Target size={48} className="mx-auto text-gray-400 mb-2" />
+            <FontAwesomeIcon icon={faBullseye} className="mx-auto text-gray-400 mb-2" style={{ fontSize: 48 }} />
             <p className="text-gray-500">No leads found</p>
           </div>
         ) : (
@@ -103,9 +133,22 @@ export default function LeadsPage() {
             >
               <div className="flex justify-between items-start mb-2">
                 <h3 className="font-bold text-lg text-gray-900">{req.name}</h3>
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(req.status)}`}>
-                  {req.status.replace('_', ' ').toUpperCase()}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(req.status)}`}>
+                    {req.status.replace('_', ' ').toUpperCase()}
+                  </span>
+                  <select
+                    value={req.status}
+                    onChange={(e) => updateStatus(req.id, e.target.value)}
+                    className="px-2 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-aa-orange"
+                    disabled={updatingId === req.id}
+                    aria-label="Update lead status"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
               </div>
               <p className="text-gray-700 mb-3">{req.requirement_text}</p>
               <div className="flex justify-between items-center text-sm">
